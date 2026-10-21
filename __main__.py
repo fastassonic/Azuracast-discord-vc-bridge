@@ -13,12 +13,34 @@ PREFIX = os.getenv("PREFIX")
 API_KEY = os.getenv("API_KEY")
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix=PREFIX, intents=intents)
+bot = commands.Bot(command_prefix=PREFIX, intents=intents,case_insensitive=True)
 
 #Changed to a dictionary to support multi server use, guild IDS are used as key while value is a Voice-client object
 client = {}
 
+async def songembedbuilder(tempDict,session):
+    temp_embed = discord.Embed(title=tempDict["title"], description=f"### By: {tempDict["artist"]} \n\n### From the album: {tempDict["album"]}\n\n### Genre: {tempDict["genre"]}")
+    #This hack brought to you by the fact that I didn't want to expose the album art to the internet
+    async with session.get(tempDict["art"]) as artresponse:
+        image = await artresponse.read()
+    discordimage = discord.File(io.BytesIO(image),filename="albumart.png")
+    temp_embed.set_image(url="attachment://albumart.png")
+    return [temp_embed,discordimage]
+
+#... my nerves of got bugged seeing this repeat so I wanted to nip it in the bud
+async def songinfobuilder(field,ctx,tempUrl=f"http://{IP}/api/nowplaying/{STATION}"):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url=tempUrl) as response:
+            if response.status == 200:
+                data = await response.json()
+                songdict = data[field]["song"]
+                songembed = await songembedbuilder(songdict,session)
+                await ctx.send(embed = songembed[0], file=songembed[1])
+            else:
+                await ctx.send("Failed to fetch data from the API.")
+
 requestWithApiKey = {"api_key": API_KEY}
+
 @bot.command()
 async def join(ctx):
     global client
@@ -45,36 +67,12 @@ async def disconnect(ctx):
 
 @bot.command()
 async def upnext(ctx):
-    async with aiohttp.ClientSession() as session:
-        async with session.get(f"http://{IP}/api/nowplaying/{STATION}") as response:
-            if response.status == 200:
-                data = await response.json()  
-                songdict = data["playing_next"]["song"]
-                temp_embed = discord.Embed(title=songdict["title"], description=f"By {songdict["artist"]} \nFrom the album {songdict["album"]}")
-                #This hack brought to you by the fact that I didn't want to expose the album art to the internet
-                async with session.get(songdict["art"]) as artresponse:
-                    image = await artresponse.read()
-                discordimage = discord.File(io.BytesIO(image),filename="albumart.png")
-                temp_embed.set_image(url="attachment://albumart.png")
-                await ctx.send(embed = temp_embed, file=discordimage)
-            else:
-                await ctx.send("Failed to fetch data from the API.")
+    await songinfobuilder("playing_next",ctx)
+
 @bot.command()
 async def currentsong(ctx):
-    async with aiohttp.ClientSession() as session:
-        async with session.get(f"http://{IP}/api/nowplaying/{STATION}") as response:
-            if response.status == 200:
-                data = await response.json()
-                songdict = data["now_playing"]["song"]
-                temp_embed = discord.Embed(title=songdict["title"], description=f"By {songdict["artist"]} \nFrom the album {songdict["album"]}")
-                #This hack brought to you by the fact that I didn't want to expose the album art to the internet
-                async with session.get(songdict["art"]) as artresponse:
-                    image = await artresponse.read()
-                discordimage = discord.File(io.BytesIO(image),filename="albumart.png")
-                temp_embed.set_image(url="attachment://albumart.png")
-                await ctx.send(embed = temp_embed, file=discordimage)
-            else:
-                await ctx.send("Failed to fetch data from the API.")
+   await songinfobuilder("now_playing",ctx)
+
 
 @bot.command()
 async def request(ctx,*, arg):
@@ -85,32 +83,34 @@ async def request(ctx,*, arg):
                 currentsongnamelist = []
                 print(data)
                 for y in data: #This is apperently automatically turned into a list instead of a dict?    
-                        currentsongnamelist.append(y["song"]["title"])
+                        currentsongnamelist.append(y["song"]["title"].lower())
 
-                if arg in currentsongnamelist:
-                    index = currentsongnamelist.index(arg)
+                if arg.lower() in currentsongnamelist:
+                    index = currentsongnamelist.index(arg.lower())
                     putstring = f"http://{IP}/api/station/{STATION}/request/"+data[index]["request_id"]
                     print(putstring)
-
                     async with session.post(putstring) as response2:
                         if response2.status == 200:
-                            await ctx.send("Successfully Requested!: " + arg)
+                            #Pulls from data for a correct capitlized version. We're keeping both anyway for simplicity sake might as well.
+                            await ctx.send("Successfully Requested!: " + data[index]["song"]["title"])
                         else:
                             await ctx.send("Failed to send request! Response was " + str(response2.status))
                 else:
                     matches = get_close_matches(arg, currentsongnamelist, cutoff=0.4)
                     #This check brought to you by Honey B. Lovely and the fact my copy of bee my honey contained japanese characters in the name.
                     for i in currentsongnamelist: 
-                        if arg in i:
+                        if arg.lower() in i:
                             matches.insert(0,i)
                     tempstring = f"Heya! I can't find anything named {arg}, could you perhaps be looking for any of these?\n"
                     for i in matches:
-                        tempstring= tempstring +"* " + i + "\n"
+                        index = currentsongnamelist.index(i)
+                        tempstring= tempstring +"* ```" + data[index]["song"]["title"] + "```\n"
                     if len(tempstring) >= 4000:
                         await ctx.send("Holy cow, dude that uh brought up alot of stuff. More then I can fit in a single message. Can you be more specific?")
                     else:
                         await ctx.send(tempstring)
             
+                
                 
             else:
                 await ctx.send("Failed to fetch data from the API.")
