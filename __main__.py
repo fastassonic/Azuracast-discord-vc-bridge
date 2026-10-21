@@ -14,10 +14,10 @@ API_KEY = os.getenv("API_KEY")
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix=PREFIX, intents=intents,case_insensitive=True)
-
+requestWithApiKey = {"api_key": API_KEY}
 #Changed to a dictionary to support multi server use, guild IDS are used as key while value is a Voice-client object
 client = {}
-
+session = aiohttp.ClientSession()
 async def songembedbuilder(tempDict,session):
     temp_embed = discord.Embed(title=tempDict["title"], description=f"### By: {tempDict["artist"]} \n\n### From the album: {tempDict["album"]}\n\n### Genre: {tempDict["genre"]}")
     #This hack brought to you by the fact that I didn't want to expose the album art to the internet
@@ -29,7 +29,6 @@ async def songembedbuilder(tempDict,session):
 
 #... my nerves of got bugged seeing this repeat so I wanted to nip it in the bud
 async def songinfobuilder(field,ctx,tempUrl=f"http://{IP}/api/nowplaying/{STATION}"):
-    async with aiohttp.ClientSession() as session:
         async with session.get(url=tempUrl) as response:
             if response.status == 200:
                 data = await response.json()
@@ -39,7 +38,7 @@ async def songinfobuilder(field,ctx,tempUrl=f"http://{IP}/api/nowplaying/{STATIO
             else:
                 await ctx.send("Failed to fetch data from the API.")
 
-requestWithApiKey = {"api_key": API_KEY}
+
 
 @bot.command()
 async def join(ctx):
@@ -76,7 +75,7 @@ async def currentsong(ctx):
 
 @bot.command()
 async def request(ctx,*, arg):
-    async with aiohttp.ClientSession() as session:
+        global session
         async with session.get(f"http://{IP}/api/station/{STATION}/requests") as response:
             if response.status == 200:
                 data = await response.json()
@@ -123,29 +122,31 @@ async def request(ctx,*, arg):
 @bot.command()
 async def currentqueue(ctx):
     if API_KEY != "" and API_KEY != "your_azuracast_api_key_here":
-        async with aiohttp.ClientSession() as session:
-                print(f"http://{IP}/api/station/{STATION}/queue")
-                async with session.get(f"http://{IP}/api/station/{STATION}/queue",params=requestWithApiKey) as response:
-                    print(response.status)
-                    if response.status == 200:
-                        data = await response.json()
-                        tempstring = ""
-                        
-                        for i in range(len(data)):
-                            songdata = data[i]["song"]
-                            tempstring= tempstring + f"{i+1}. {songdata["title"]} by {songdata["artist"]} \n" 
-                            
-                        temp_embed = discord.Embed(title="Queue!", description=tempstring)
-                        await ctx.send(embed=temp_embed)
-                            
-                    else:
-                        await ctx.send("Failed to fetch data from the API.")
+        global session
+        print(f"http://{IP}/api/station/{STATION}/queue")
+        async with session.get(f"http://{IP}/api/station/{STATION}/queue",params=requestWithApiKey) as response:
+            print(response.status)
+            if response.status == 200:
+                data = await response.json()
+                tempstring = ""
+                
+                for i in range(len(data)):
+                    songdata = data[i]["song"]
+                    tempstring= tempstring + f"{i+1}. {songdata["title"]} by {songdata["artist"]} \n" 
+                    
+                temp_embed = discord.Embed(title="Queue!", description=tempstring)
+                await ctx.send(embed=temp_embed)
+                    
+            else:
+                await ctx.send("Failed to fetch data from the API.")
     else:
         await ctx.send("Whoevers running the bot either did not add an api key or does not have access to the queue of the station! Sorry!")
 
 
 
-bot.run(TOKEN)
+try: bot.run(TOKEN)
+finally:
+    session.close()
 
 
 
