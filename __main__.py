@@ -1,3 +1,5 @@
+import asyncio
+
 import discord
 import os 
 import io
@@ -16,8 +18,8 @@ intents.message_content = True
 bot = commands.Bot(command_prefix=PREFIX, intents=intents,case_insensitive=True)
 requestWithApiKey = {"api_key": API_KEY}
 #Changed to a dictionary to support multi server use, guild IDS are used as key while value is a Voice-client object
+session = None
 client = {}
-session = aiohttp.ClientSession()
 async def songembedbuilder(tempDict,session):
     temp_embed = discord.Embed(title=tempDict["title"], description=f"### By: {tempDict["artist"]} \n\n### From the album: {tempDict["album"]}\n\n### Genre: {tempDict["genre"]}")
     #This hack brought to you by the fact that I didn't want to expose the album art to the internet
@@ -37,9 +39,15 @@ async def songinfobuilder(field,ctx,tempUrl=f"http://{IP}/api/nowplaying/{STATIO
                 await ctx.send(embed = songembed[0], file=songembed[1])
             else:
                 await ctx.send("Failed to fetch data from the API.")
-
-
-
+@bot.event
+async def on_ready():
+    #this... is why you test things before shipping it out... It's midnight... Why did i decide to listen to my own brain
+    global session
+    session = aiohttp.ClientSession()
+#This was retroactively made not a bot event becuase the finally block will make sure anything but a force kill will have the session close. I have made 3 dangling sessions because of this.
+async def on_close():
+    global session
+    await session.close()
 @bot.command()
 async def join(ctx):
     global client
@@ -52,8 +60,6 @@ async def join(ctx):
         client[ctx.guild.id].play(volumecorrected)
     else:
         await client[ctx.guild.id].move_to(voicechannel)
-
-
 
 @bot.command()
 async def disconnect(ctx):
@@ -108,16 +114,9 @@ async def request(ctx,*, arg):
                         await ctx.send("Holy cow, dude that uh brought up alot of stuff. More then I can fit in a single message. Can you be more specific?")
                     else:
                         await ctx.send(tempstring)
-            
-                
-                
             else:
                 await ctx.send("Failed to fetch data from the API.")
-    
-    
 
-    
-    
 
 @bot.command()
 async def currentqueue(ctx):
@@ -129,24 +128,15 @@ async def currentqueue(ctx):
             if response.status == 200:
                 data = await response.json()
                 tempstring = ""
-                
                 for i in range(len(data)):
                     songdata = data[i]["song"]
                     tempstring= tempstring + f"{i+1}. {songdata["title"]} by {songdata["artist"]} \n" 
-                    
                 temp_embed = discord.Embed(title="Queue!", description=tempstring)
-                await ctx.send(embed=temp_embed)
-                    
+                await ctx.send(embed=temp_embed)   
             else:
                 await ctx.send("Failed to fetch data from the API.")
     else:
         await ctx.send("Whoevers running the bot either did not add an api key or does not have access to the queue of the station! Sorry!")
 
-
-
 try: bot.run(TOKEN)
-finally:
-    session.close()
-
-
-
+finally: asyncio.run(on_close())    
