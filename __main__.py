@@ -31,7 +31,7 @@ async def songembedbuilder(tempDict,session):
 
 #... my nerves of got bugged seeing this repeat so I wanted to nip it in the bud
 async def songinfobuilder(field,ctx,tempUrl=f"http://{IP}/api/nowplaying/{STATION}"):
-        data = await jsonrequester(tempUrl,params=requestWithApiKey)
+        data = await jsonrequester(tempUrl)
         if data == "failed": 
             await ctx.send("Failed to fetch data from the API.")
             return
@@ -90,7 +90,7 @@ async def currentsong(ctx):
 
 @bot.command()
 async def request(ctx,*, arg):
-        data = await jsonrequester(f"http://{IP}/api/station/{STATION}/requests",params=requestWithApiKey)
+        data = await jsonrequester(f"http://{IP}/api/station/{STATION}/requests")
         if data == "failed": 
             await ctx.send("Failed to fetch data from the API.")
             return
@@ -129,7 +129,7 @@ async def request(ctx,*, arg):
 @bot.command()
 async def currentqueue(ctx):
     if API_KEY != "" and API_KEY != "your_azuracast_api_key_here":
-        data = await jsonrequester(f"http://{IP}/api/station/{STATION}/queue",params=requestWithApiKey)
+        data = await jsonrequester(f"http://{IP}/api/station/{STATION}/queue",parameters=requestWithApiKey)
         if data == "failed": 
             await ctx.send("Failed to fetch data from the API.")
             return
