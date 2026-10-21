@@ -31,14 +31,23 @@ async def songembedbuilder(tempDict,session):
 
 #... my nerves of got bugged seeing this repeat so I wanted to nip it in the bud
 async def songinfobuilder(field,ctx,tempUrl=f"http://{IP}/api/nowplaying/{STATION}"):
-        async with session.get(url=tempUrl) as response:
-            if response.status == 200:
-                data = await response.json()
-                songdict = data[field]["song"]
-                songembed = await songembedbuilder(songdict,session)
-                await ctx.send(embed = songembed[0], file=songembed[1])
-            else:
-                await ctx.send("Failed to fetch data from the API.")
+        data = await jsonrequester(tempUrl,params=requestWithApiKey)
+        if data == "failed": 
+            await ctx.send("Failed to fetch data from the API.")
+            return
+        songdict = data[field]["song"]
+        songembed = await songembedbuilder(songdict,session)
+        await ctx.send(embed = songembed[0], file=songembed[1])
+
+async def jsonrequester(pUrl,parameters=None):
+    global session
+    async with session.get(url=pUrl,params=parameters) as response:
+            if response.status == 200: data = await response.json()
+            else: data = "failed"
+
+    return data
+
+
 @bot.event
 async def on_ready():
     #this... is why you test things before shipping it out... It's midnight... Why did i decide to listen to my own brain
@@ -81,60 +90,55 @@ async def currentsong(ctx):
 
 @bot.command()
 async def request(ctx,*, arg):
-        global session
-        async with session.get(f"http://{IP}/api/station/{STATION}/requests") as response:
-            if response.status == 200:
-                data = await response.json()
-                currentsongnamelist = []
-                print(data)
-                for y in data: #This is apperently automatically turned into a list instead of a dict?    
-                        currentsongnamelist.append(y["song"]["title"].lower())
-
-                if arg.lower() in currentsongnamelist:
-                    index = currentsongnamelist.index(arg.lower())
-                    putstring = f"http://{IP}/api/station/{STATION}/request/"+data[index]["request_id"]
-                    print(putstring)
-                    async with session.post(putstring) as response2:
-                        if response2.status == 200:
-                            #Pulls from data for a correct capitlized version. We're keeping both anyway for simplicity sake might as well.
-                            await ctx.send("Successfully Requested!: " + data[index]["song"]["title"])
-                        else:
-                            await ctx.send("Failed to send request! Response was " + str(response2.status))
+        data = await jsonrequester(f"http://{IP}/api/station/{STATION}/requests",params=requestWithApiKey)
+        if data == "failed": 
+            await ctx.send("Failed to fetch data from the API.")
+            return
+        currentsongnamelist = []
+        print(data)
+        for y in data: #This is apperently automatically turned into a list instead of a dict?    
+                currentsongnamelist.append(y["song"]["title"].lower())
+        #Handler for clear match
+        if arg.lower() in currentsongnamelist:
+            index = currentsongnamelist.index(arg.lower())
+            putstring = f"http://{IP}/api/station/{STATION}/request/"+data[index]["request_id"]
+            print(putstring)
+            async with session.post(putstring) as response2:
+                if response2.status == 200:
+                    #Pulls from data for a correct capitlized version. We're keeping both anyway for simplicity sake might as well.
+                    await ctx.send("Successfully Requested!: " + data[index]["song"]["title"])
                 else:
-                    matches = get_close_matches(arg, currentsongnamelist, cutoff=0.4)
-                    #This check brought to you by Honey B. Lovely and the fact my copy of bee my honey contained japanese characters in the name.
-                    for i in currentsongnamelist: 
-                        if arg.lower() in i:
-                            matches.insert(0,i)
-                    tempstring = f"Heya! I can't find anything named {arg}, could you perhaps be looking for any of these?\n"
-                    for i in matches:
-                        index = currentsongnamelist.index(i)
-                        tempstring= tempstring +"* ```" + data[index]["song"]["title"] + "```\n"
-                    if len(tempstring) >= 4000:
-                        await ctx.send("Holy cow, dude that uh brought up alot of stuff. More then I can fit in a single message. Can you be more specific?")
-                    else:
-                        await ctx.send(tempstring)
+                    await ctx.send("Failed to send request! Response was " + str(response2.status))
+        #Handler for no clear matches
+        else:
+            matches = get_close_matches(arg, currentsongnamelist, cutoff=0.4)
+            #This check brought to you by Honey B. Lovely and the fact my copy of bee my honey contained japanese characters in the name.
+            for i in currentsongnamelist: 
+                if arg.lower() in i:
+                    matches.insert(0,i)
+            tempstring = f"Heya! I can't find anything named {arg}, could you perhaps be looking for any of these?\n"
+            for i in matches:
+                index = currentsongnamelist.index(i)
+                tempstring= tempstring +"* ```" + data[index]["song"]["title"] + "```\n"
+            if len(tempstring) >= 4000:
+                await ctx.send("Holy cow, dude that uh brought up alot of stuff. More then I can fit in a single message. Can you be more specific?")
             else:
-                await ctx.send("Failed to fetch data from the API.")
+                await ctx.send(tempstring)
 
 
 @bot.command()
 async def currentqueue(ctx):
     if API_KEY != "" and API_KEY != "your_azuracast_api_key_here":
-        global session
-        print(f"http://{IP}/api/station/{STATION}/queue")
-        async with session.get(f"http://{IP}/api/station/{STATION}/queue",params=requestWithApiKey) as response:
-            print(response.status)
-            if response.status == 200:
-                data = await response.json()
-                tempstring = ""
-                for i in range(len(data)):
-                    songdata = data[i]["song"]
-                    tempstring= tempstring + f"{i+1}. {songdata["title"]} by {songdata["artist"]} \n" 
-                temp_embed = discord.Embed(title="Queue!", description=tempstring)
-                await ctx.send(embed=temp_embed)   
-            else:
-                await ctx.send("Failed to fetch data from the API.")
+        data = await jsonrequester(f"http://{IP}/api/station/{STATION}/queue",params=requestWithApiKey)
+        if data == "failed": 
+            await ctx.send("Failed to fetch data from the API.")
+            return
+        tempstring = ""
+        for i in range(len(data)):
+            songdata = data[i]["song"]
+            tempstring= tempstring + f"{i+1}. {songdata["title"]} by {songdata["artist"]} \n" 
+        temp_embed = discord.Embed(title="Queue!", description=tempstring)
+        await ctx.send(embed=temp_embed)   
     else:
         await ctx.send("Whoevers running the bot either did not add an api key or does not have access to the queue of the station! Sorry!")
 
