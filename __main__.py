@@ -14,32 +14,34 @@ API_KEY = os.getenv("API_KEY")
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix=PREFIX, intents=intents)
-client = None
+
+#Changed to a dictionary to support multi server use, guild IDS are used as key while value is a Voice-client object
+client = {}
 
 requestWithApiKey = {"api_key": API_KEY}
 @bot.command()
 async def join(ctx):
     global client
     voicechannel = ctx.author.voice.channel
-    if not client:
-        client = await voicechannel.connect()
+    if not ctx.guild.id in client.keys():
+        client[ctx.guild.id] = await voicechannel.connect()
         print(f"http://{IP}/listen/{STATION}/radio.mp3")
         rawstream = discord.FFmpegPCMAudio(f"http://{IP}/listen/{STATION}/radio.mp3")
         volumecorrected =  discord.PCMVolumeTransformer(rawstream, volume=1)
-        client.play(volumecorrected)
+        client[ctx.guild.id].play(volumecorrected)
     else:
-        await client.move_to(voicechannel)
+        await client[ctx.guild.id].move_to(voicechannel)
 
 
 
 @bot.command()
 async def disconnect(ctx):
     global client
-    if not client:
+    if not ctx.guild.id in client.keys():
         await ctx.send("Hey uh... I'm nowhere to be seen dude")
     else:
-        await client.disconnect()
-        client = None
+        await client[ctx.guild.id].disconnect()
+        del client[ctx.guild.id]
 
 @bot.command()
 async def upnext(ctx):
@@ -120,26 +122,30 @@ async def request(ctx,*, arg):
 
 @bot.command()
 async def currentqueue(ctx):
-    async with aiohttp.ClientSession() as session:
-            print(f"http://{IP}/api/station/{STATION}/queue")
-            async with session.get(f"http://{IP}/api/station/{STATION}/queue",params=requestWithApiKey) as response:
-                print(response.status)
-                if response.status == 200:
-                    data = await response.json()
-                    tempstring = ""
-                    
-                    for i in range(len(data)):
-                        songdata = data[i]["song"]
-                        tempstring= tempstring + f"{i+1}. {songdata["title"]} by {songdata["artist"]} \n" 
+    if API_KEY != "" and API_KEY != "your_azuracast_api_key_here":
+        async with aiohttp.ClientSession() as session:
+                print(f"http://{IP}/api/station/{STATION}/queue")
+                async with session.get(f"http://{IP}/api/station/{STATION}/queue",params=requestWithApiKey) as response:
+                    print(response.status)
+                    if response.status == 200:
+                        data = await response.json()
+                        tempstring = ""
                         
-                    temp_embed = discord.Embed(title="Queue!", description=tempstring)
-                    await ctx.send(embed=temp_embed)
-                        
-                else:
-                    await ctx.send("Failed to fetch data from the API.")
+                        for i in range(len(data)):
+                            songdata = data[i]["song"]
+                            tempstring= tempstring + f"{i+1}. {songdata["title"]} by {songdata["artist"]} \n" 
+                            
+                        temp_embed = discord.Embed(title="Queue!", description=tempstring)
+                        await ctx.send(embed=temp_embed)
+                            
+                    else:
+                        await ctx.send("Failed to fetch data from the API.")
+    else:
+        await ctx.send("Whoevers running the bot either did not add an api key or does not have access to the queue of the station! Sorry!")
 
 
 
 bot.run(TOKEN)
+
 
 
